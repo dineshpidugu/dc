@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classic Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Georgia&display=swap" rel="stylesheet">
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #a0a0a0;
+            border-radius: 10px;
+        }
+
+        /* Classic Theme Pattern */
+        .classic-bg {
+            background-color: #e5ddd5;
+            background-image: url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
+            background-blend-mode: soft-light;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+        }
+
+        #chat {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+
+<body class="classic-bg h-screen flex flex-col overflow-hidden text-gray-800">
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+            class="bg-white rounded-lg shadow-xl p-8 max-w-sm w-full text-center border-4 border-double border-gray-300">
+            <h2 class="text-2xl font-bold mb-4 text-gray-700">Welcome</h2>
+            <p class="mb-6 text-sm text-gray-500">Enter your name to join the conversation.</p>
+            <input type="text" id="usernameInput"
+                class="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-600 focus:outline-none mb-4 font-sans"
+                placeholder="Your Name">
+            <button id="joinBtn"
+                class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded hover:bg-green-700 transition">
+                Join Chat
+            </button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-[#ededed] border-b border-gray-300 px-4 py-3 flex items-center justify-between shadow-sm z-20">
+        <div class="flex items-center space-x-3">
+            <div class="relative">
+                <div
+                    class="w-10 h-10 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold text-lg shadow">
+                    G</div>
+                <div class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+            </div>
+            <div>
+                <h2 class="font-bold text-gray-800 text-lg">Group Chat</h2>
+                <p id="status" class="text-xs text-gray-500 font-medium italic">Connecting...</p>
+            </div>
+        </div>
+        <div class="text-sm text-gray-600 font-semibold" id="myTagName"></div>
+    </header>
+
+    <!-- Chat Area -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar relative">
+        <div id="chat" class="max-w-4xl mx-auto space-y-2">
+            <div
+                class="self-center bg-[#fff8c4] text-gray-600 text-[10px] px-3 py-1 rounded shadow-sm border border-yellow-200 uppercase tracking-widest mb-4">
+                End-to-end Encrypted
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-[#f0f0f0] border-t border-gray-300 p-3">
+        <div class="max-w-4xl mx-auto flex items-center space-x-2">
+            <form id="chat-form" class="flex-1 relative flex items-center space-x-2" onsubmit="event.preventDefault();">
+                <input type="text" id="messageInput" autocomplete="off" placeholder="Type a message..."
+                    class="flex-1 bg-white border border-gray-300 rounded-full py-2 px-4 text-base focus:ring-1 focus:ring-green-500 focus:outline-none font-sans shadow-inner">
+                <button type="button" id="sendBtn"
+                    class="bg-green-600 text-white p-2.5 rounded-full hover:bg-green-700 transition shadow-md">
+                    <svg class="w-5 h-5 transform rotate-90" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                            d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z">
+                        </path>
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </footer>
+
+    <script>
+        const ws = new WebSocket("ws://localhost:8000/ws/chat/");
+        const chat = document.getElementById("chat");
+        const input = document.getElementById("messageInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const statusText = document.getElementById("status");
+
+        // Login Elements
+        const loginModal = document.getElementById("loginModal");
+        const usernameInput = document.getElementById("usernameInput");
+        const joinBtn = document.getElementById("joinBtn");
+        const myTagName = document.getElementById("myTagName");
+
+        // Identity State
+        let myId = localStorage.getItem("chat_user_id");
+        let myName = localStorage.getItem("chat_username");
+
+        if (!myId) {
+            myId = Math.random().toString(36).substring(2, 10);
+            localStorage.setItem("chat_user_id", myId);
+        }
+
+        // Initialize Login State & Send Join
+        if (myName) {
+            loginModal.classList.add("hidden");
+            myTagName.innerText = "You: " + myName;
+        }
+
+        // Handle Login
+        joinBtn.onclick = () => {
+            const name = usernameInput.value.trim();
+            if (name) {
+                myName = name;
+                localStorage.setItem("chat_username", myName);
+                loginModal.classList.add("hidden");
+                myTagName.innerText = "You: " + myName;
+                sendJoin(myName);
+            }
+        };
+
+        ws.onopen = () => {
+            statusText.innerText = "Online";
+            statusText.classList.replace("text-gray-500", "text-green-600");
+
+            // Send join if we already have a name
+            if (myName) {
+                sendJoin(myName);
+            }
+        };
+        ws.onclose = () => { statusText.innerText = "Offline"; statusText.classList.replace("text-green-600", "text-red-500"); };
+
+        function sendJoin(name) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "join", username: name }));
+            }
+        }
+
+        // Request Notification Permission
+        if (Notification.permission !== "granted") {
+            Notification.requestPermission();
+        }
+
+        // 2. Receiving Messages
+        ws.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+
+            // Handle Clear Command
+            if (data.type === "clear") {
+                chat.innerHTML = `
+                <div class="self-center bg-[#fff8c4] text-gray-600 text-[10px] px-3 py-1 rounded shadow-sm border border-yellow-200 uppercase tracking-widest mb-4">
+                    End-to-end Encrypted
+                </div>`;
+                return;
+            }
+
+            // Handle System Message (Join)
+            if (data.type === "system") {
+                const sysDiv = document.createElement("div");
+                sysDiv.className = "self-center bg-gray-200 text-gray-600 text-[10px] px-3 py-1 rounded-full uppercase tracking-widest mb-2 font-bold opacity-75";
+                sysDiv.innerText = data.message;
+                chat.appendChild(sysDiv);
+
+                if (document.hidden && Notification.permission === "granted") {
+                    new Notification("System", { body: data.message });
+                }
+
+                // Auto-scroll
+                const mainContent = document.querySelector('main');
+                mainContent.scrollTo({ top: mainContent.scrollHeight, behavior: 'smooth' });
+                return;
+            }
+
+            const msgDiv = document.createElement("div");
+            const wrapper = document.createElement("div");
+
+            // Render Name tag
+            const nameTag = document.createElement("span");
+            nameTag.className = "text-[10px] font-bold mb-0.5 px-1 block";
+
+            // Check based on Sender ID
+            if (data.sender === myId) {
+                wrapper.className = "flex flex-col items-end w-full mb-1";
+                msgDiv.className = "bg-[#dcf8c6] text-gray-800 px-3 py-1.5 rounded-lg rounded-tr-none max-w-[75%] shadow border border-green-200 text-sm font-sans";
+                nameTag.className += " text-right text-green-800 hidden"; // Hide my own name mostly
+            } else {
+                wrapper.className = "flex flex-col items-start w-full mb-1";
+                msgDiv.className = "bg-white text-gray-800 px-3 py-1.5 rounded-lg rounded-tl-none max-w-[75%] shadow border border-gray-300 text-sm font-sans";
+                nameTag.className += " text-left text-orange-800";
+                nameTag.innerText = data.username || "Unknown";
+
+                // Show Notification if from others
+                if (document.hidden && Notification.permission === "granted") {
+                    new Notification(`New Message from ${data.username || 'Someone'}`, { body: data.message });
+                }
+            }
+
+            msgDiv.textContent = data.message;
+
+            // Add Timestamp inside bubble (WhatsApp style)
+            const time = document.createElement("span");
+            time.className = "text-[9px] text-gray-500 float-right mt-1 ml-2 select-none";
+            time.innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Structure: Wrapper -> Name -> Bubble(Text + Time)
+            if (data.sender !== myId) {
+                wrapper.appendChild(nameTag);
+            }
+            msgDiv.appendChild(time);
+            wrapper.appendChild(msgDiv);
+            chat.appendChild(wrapper);
+
+            // 3. Auto-scroll to bottom
+            const mainContent = document.querySelector('main');
+            mainContent.scrollTo({
+                top: mainContent.scrollHeight,
+                behavior: 'smooth'
+            });
+        };
+
+        // 4. Sending Messages
+        function sendMessage() {
+            if (input.value.trim() === "") return;
+            if (!myName) {
+                loginModal.classList.remove("hidden");
+                return;
+            }
+
+            const messageData = {
+                sender: myId,
+                message: input.value,
+                username: myName
+            };
+            ws.send(JSON.stringify(messageData));
+            input.value = "";
+        }
+
+        sendBtn.addEventListener("click", sendMessage);
+        input.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+
+</html>
