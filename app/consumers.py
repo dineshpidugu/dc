@@ -95,7 +95,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def get_last_10_messages(self, room_name):
-        return [{'content': msg.content, 'sender': msg.sender, 'username': msg.username} for msg in Message.objects.filter(room_name=room_name).order_by('timestamp')[:50]]
+        messages = Message.objects.filter(room_name=room_name).order_by('-timestamp')[:50]
+        return [{'content': msg.content, 'sender': msg.sender, 'username': msg.username} for msg in reversed(messages)]
 
     @database_sync_to_async
     def save_message(self, room_name, message, sender, username):
