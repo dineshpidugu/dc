@@ -24,4 +24,4 @@ COPY . /app/
 EXPOSE 8000
 
 # Run Daphne
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "chat.asgi:application"]
+CMD ["sh", "-c", "daphne -b 0.0.0.0 -p ${PORT:-8000} chat.asgi:application"]
